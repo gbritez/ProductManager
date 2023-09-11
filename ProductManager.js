@@ -1,13 +1,20 @@
 
-export default class ProductManager {
-    constructor() {
-        this.products = []
+const fs = require('fs')
+
+class ProductManager {
+    constructor(path) {
+        this.path = path;
+        const fileExists = fs.existsSync(path)
+        if (!fileExists) {
+            fs.writeFileSync(this.path, '')
+        }
     }
 
-    addProduct(title, description, price, thumbnail, code, stock) {
+    async addProduct(title, description, price, thumbnail, code, stock) {
         let id = 1;
+        let products = await this.getProducts()
 
-        const product = this.products[this.products.length - 1]
+        const product = products[products.length - 1]
         if (product) {
             id = product.id + 1;
         }
@@ -22,23 +29,29 @@ export default class ProductManager {
             { key: 'id', value: id }
         ]
 
-        if (this.validateProduct(keyValueArray)) {
+        if (this.validateProduct(keyValueArray, products)) {
             const newProduct = keyValueArray.reduce((obj, item) => {
                 obj[item.key] = item.value;
                 return obj;
             }, {})
-            this.products = [...this.products, newProduct]
-            console.log('Successfully added product.')
+            products = [...products, newProduct]
+            await fs.promises.writeFile(this.path, JSON.stringify(products))
+            console.log('Product added successfully.')
         }
     }
 
-    getProducts() {
-        console.table(this.products);
-        return this.products;
+    async getProducts() {
+        const products = await fs.promises.readFile(this.path, 'utf-8');
+        if (products) {
+            return JSON.parse(products)
+        }
+        else {
+            return []
+        }
     }
-
-    getProductById(id) {
-        const result = this.products.find(x => x.id === id)
+    async getProductById(id) {
+        const products = await this.getProducts()
+        const result = products.find(x => x.id === id)
         if (result) {
             console.table(result);
             return result;
@@ -47,8 +60,46 @@ export default class ProductManager {
             console.log('Not found.')
         }
     }
+    async deleteProduct(id) {
+        const products = await this.getProducts()
+        const result = products.find(x => x.id === id)
 
-    validateProduct(params) {
+        if (result) {
+            let filteredProducts = products.filter(x => x.id !== result.id)
+            await fs.promises.writeFile(this.path, JSON.stringify(filteredProducts))
+            console.log('Product has been deleted.')
+        }
+        else {
+            console.log('Not found.')
+        }
+    }
+    async updateProduct(id, property, value) {
+        let products = await this.getProducts()
+        let product = await this.getProductById(id)
+        const keys = Object.keys(product)
+
+        if (!product) {
+            console.log('Not found')
+            return;
+        }
+
+        if (!keys.includes(property)) {
+            console.log(`'${property}' is not a valid property`)
+            return;
+        }
+
+        try {
+            product[property] = value;
+            products = products.filter(x => x.id !== product.id)
+            products = [...products, product]
+            await fs.promises.writeFile(this.path, JSON.stringify(products))
+            console.log('Product updated successfully.')
+        }
+        catch (err) {
+            console.log(err)
+        }
+    }
+    validateProduct(params, products) {
         let validation = true;
 
         params.forEach(element => {
@@ -59,7 +110,7 @@ export default class ProductManager {
         })
 
         const code = params.find(x => x.key === 'code')
-        const product = this.products.find(x => x.code === code.value)
+        const product = products.find(x => x.code === code.value)
 
         if (product) {
             console.log('Duplicated product code.')
@@ -68,3 +119,5 @@ export default class ProductManager {
         return validation;
     }
 }
+
+module.exports = ProductManager
